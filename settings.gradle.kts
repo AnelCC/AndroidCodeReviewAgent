@@ -24,3 +24,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "AndroidCodeReviewAgent"
 include(":app")
+include(":agent")
