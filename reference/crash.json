@@ -1,1 +1,5 @@
-{"exception":"java.lang.NullPointerException","message":"Attempt to invoke getName() on null device","stack":"at com.example.mower.DeviceViewModel.connect(DeviceViewModel.kt:42)"}
+{
+  "exception": "java.lang.NullPointerException",
+  "message": "Attempt to invoke getName() on null device",
+  "stack": "at com.example.mower.DeviceViewModel.connect(DeviceViewModel.kt:42)"
+}

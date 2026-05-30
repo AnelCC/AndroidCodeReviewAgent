@@ -10,3 +10,8 @@ kotlin {
 application {
     mainClass.set("com.anelcc.agent.MainKt")
 }
+
+// Resolve the default samples folder from the repository root.
+tasks.named<JavaExec>("run") {
+    workingDir(rootProject.projectDir)
+}
