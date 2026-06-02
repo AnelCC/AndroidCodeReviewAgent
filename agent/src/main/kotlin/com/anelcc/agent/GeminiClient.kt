@@ -26,6 +26,18 @@ class GeminiClient(private val apiKey: String, private val model: String) {
                 }
             }
         }
+        return parseGeminiResponseText(send(body))
+    }
+
+    fun generateContent(contents: JsonArray, tools: JsonArray): JsonObject {
+        val body = buildJsonObject {
+            put("contents", contents)
+            put("tools", tools)
+        }
+        return parseGeminiContent(send(body))
+    }
+
+    private fun send(body: JsonObject): String {
         val request = HttpRequest.newBuilder(
             URI.create("https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent")
         )
@@ -46,23 +58,30 @@ class GeminiClient(private val apiKey: String, private val model: String) {
                 else -> "Gemini returned HTTP ${response.statusCode()}. Try again later."
             })
         }
-        return parseGeminiResponseText(response.body())
+        return response.body()
     }
 }
 
 internal class GeminiRequestException(message: String) : RuntimeException(message)
 
-internal fun parseGeminiResponseText(body: String): String {
+internal fun parseGeminiContent(body: String): JsonObject {
     val response = Json.parseToJsonElement(body).jsonObject
     val candidate = response["candidates"]?.jsonArray?.firstOrNull()?.jsonObject
         ?: throw GeminiRequestException("Gemini returned no answer; the prompt may have been blocked.")
     if (candidate["finishReason"]?.jsonPrimitive?.content != "STOP") {
         throw GeminiRequestException("Gemini did not finish a complete answer.")
     }
-    val text = candidate["content"]?.jsonObject?.get("parts")?.jsonArray.orEmpty()
+    return candidate["content"]?.jsonObject
+        ?: throw GeminiRequestException("Gemini returned no content.")
+}
+
+internal fun parseGeminiResponseText(body: String): String =
+    geminiText(parseGeminiContent(body)).also {
+        if (it.isBlank()) throw GeminiRequestException("Gemini returned no text.")
+    }
+
+internal fun geminiText(content: JsonObject): String =
+    content["parts"]?.jsonArray.orEmpty()
         .filter { it.jsonObject["thought"]?.jsonPrimitive?.booleanOrNull != true }
         .mapNotNull { it.jsonObject["text"]?.jsonPrimitive?.content }
         .joinToString("\n")
-    if (text.isBlank()) throw GeminiRequestException("Gemini returned no text.")
-    return text
-}

@@ -51,3 +51,17 @@ If the terminal cannot locate Java, use Android Studio's bundled JDK:
 export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 export PATH="$JAVA_HOME/bin:$PATH"
 ```
+
+## First tool-calling milestone
+
+```sh
+./gradlew :agent:run --args="--discover"
+```
+
+Uses GEMINI_API_KEY and the same model as --gemini. The model can request
+list_files; Kotlin validates the request, runs the real file tool, and returns
+its JSON result. All model content parts are preserved between rounds, and
+function response IDs match request IDs when present. The model chooses whether
+to call the tool; the prompt asks it to list files. Logs show each exchange.
+Only file paths are sent, not source contents. read_file is not exposed yet.
+The loop stops after at most four model requests (no automatic retries).

@@ -1,20 +1,26 @@
 package com.anelcc.agent
 
 fun main(args: Array<String>) {
-    if (args.firstOrNull() == "--gemini") {
+    if (args.firstOrNull() in setOf("--gemini", "--discover")) {
         val key = System.getenv("GEMINI_API_KEY")?.takeIf { it.isNotBlank() }
         if (key == null) {
-            System.err.println("Set GEMINI_API_KEY before using --gemini.")
+            System.err.println("Set GEMINI_API_KEY before using --gemini or --discover.")
             kotlin.system.exitProcess(1)
         }
         val model = System.getenv("GEMINI_MODEL")?.takeIf { it.isNotBlank() }
             ?: "gemini-3.5-flash-lite"
         try {
-            println("[model request] Gemini model=$model; text-only connection check")
-            val answer = GeminiClient(key, model).generateText(
-                "In one short sentence, explain what an AI code review agent does."
-            )
-            println("[model response] $answer")
+            val client = GeminiClient(key, model)
+            if (args.first() == "--discover") {
+                val root = java.nio.file.Path.of(args.getOrNull(1) ?: "samples")
+                Agent(FileTools(root), client::generateContent).discoverFiles()
+            } else {
+                println("[model request] Gemini model=$model; text-only connection check")
+                val answer = client.generateText(
+                    "In one short sentence, explain what an AI code review agent does."
+                )
+                println("[model response] $answer")
+            }
         } catch (error: InterruptedException) {
             Thread.currentThread().interrupt()
             System.err.println("Gemini request interrupted.")
