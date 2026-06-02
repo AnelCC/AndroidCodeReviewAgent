@@ -30,7 +30,7 @@ class Agent(
                         put("name", "list_files")
                         put("description", "List Kotlin source paths relative to the configured review folder. Takes no arguments.")
                     }
-                    // Definition only for now; execution will be connected in step 2.
+                    // The required path is validated again before executing the tool.
                     addJsonObject {
                         put("name", "read_file")
                         put("description", "Read a Kotlin source file inside the review folder and return its contents with line numbers. Use a relative path returned by list_files.")
@@ -69,14 +69,38 @@ class Agent(
                 val name = call.getValue("name").jsonPrimitive.content
                 val args = call["args"] ?: buildJsonObject {}
                 println("[tool call] $name args=$args")
-                val result = when {
-                    name != "list_files" -> buildJsonObject { put("error", "Unknown tool. Only list_files is available.") }
-                    args !is JsonObject || args.isNotEmpty() -> buildJsonObject { put("error", "list_files takes no arguments.") }
-                    else -> try {
-                        buildJsonObject { putJsonArray("files") { files.listFiles().forEach { add(it) } } }
-                    } catch (error: java.io.IOException) {
-                        buildJsonObject { put("error", "Could not list the review folder.") }
+                val result = try {
+                    when (name) {
+                        "list_files" -> {
+                            require(args is JsonObject && args.isEmpty()) {
+                                "list_files takes no arguments"
+                            }
+                            buildJsonObject {
+                                putJsonArray("files") { files.listFiles().forEach { add(it) } }
+                            }
+                        }
+                        "read_file" -> {
+                            require(args is JsonObject && args.keys == setOf("path")) {
+                                "read_file requires only a path argument"
+                            }
+                            val path = args["path"] as? JsonPrimitive
+                            require(path != null && path.isString && path.content.isNotBlank()) {
+                                "path must be a nonblank string"
+                            }
+                            val contents = files.readFile(path.content)
+                            buildJsonObject {
+                                put("path", path.content)
+                                put("contents", contents)
+                            }
+                        }
+                        else -> buildJsonObject { put("error", "Unknown tool. Use list_files or read_file.") }
                     }
+                } catch (error: IllegalArgumentException) {
+                    buildJsonObject { put("error", "Invalid tool arguments or disallowed file path.") }
+                } catch (error: java.io.IOException) {
+                    buildJsonObject { put("error", "Could not access the requested file or review folder.") }
+                } catch (error: SecurityException) {
+                    buildJsonObject { put("error", "Access to the requested file was denied.") }
                 }
                 println("[tool result] $result")
                 buildJsonObject {

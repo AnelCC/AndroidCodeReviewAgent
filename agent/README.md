@@ -63,5 +63,8 @@ list_files; Kotlin validates the request, runs the real file tool, and returns
 its JSON result. All model content parts are preserved between rounds, and
 function response IDs match request IDs when present. The model chooses whether
 to call the tool; the prompt asks it to list files. Logs show each exchange.
-Only file paths are sent, not source contents. read_file is not exposed yet.
+The discovery prompt still asks only for paths. Both list_files and read_file are
+now exposed and executable: if the model requests read_file, numbered source
+contents are sent back. read_file requires exactly one nonblank string argument,
+path, and FileTools restricts access to the review folder.
 The loop stops after at most four model requests (no automatic retries).
