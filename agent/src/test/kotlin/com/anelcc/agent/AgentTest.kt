@@ -47,7 +47,7 @@ class AgentTest {
                 finalContent
             }
         })
-        assertEquals("Found GreetingActivity.kt", agent.discoverFiles())
+        assertEquals("Found GreetingActivity.kt", agent.reviewCode())
         assertEquals(2, requests)
     }
 
@@ -55,7 +55,7 @@ class AgentTest {
     fun `stops a model that repeatedly requests tools`() = withFiles { files ->
         var requests = 0
         val agent = Agent(files, { _, _ -> requests++; callContent }, maxRounds = 2)
-        assertFailsWith<GeminiRequestException> { agent.discoverFiles() }
+        assertFailsWith<GeminiRequestException> { agent.reviewCode() }
         assertEquals(2, requests)
     }
 
@@ -72,7 +72,7 @@ class AgentTest {
                 finalContent
             }
         })
-        agent.discoverFiles()
+        agent.reviewCode()
         assertEquals(2, requests)
     }
 
@@ -100,7 +100,7 @@ class AgentTest {
                 result = response.getValue("response").jsonObject
                 finalContent
             }
-        }).discoverFiles()
+        }).reviewCode()
         return requireNotNull(result)
     }
 

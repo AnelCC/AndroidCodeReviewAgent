@@ -1,19 +1,19 @@
 package com.anelcc.agent
 
 fun main(args: Array<String>) {
-    if (args.firstOrNull() in setOf("--gemini", "--discover")) {
+    if (args.firstOrNull() in setOf("--gemini", "--review")) {
         val key = System.getenv("GEMINI_API_KEY")?.takeIf { it.isNotBlank() }
         if (key == null) {
-            System.err.println("Set GEMINI_API_KEY before using --gemini or --discover.")
+            System.err.println("Set GEMINI_API_KEY before using --gemini or --review.")
             kotlin.system.exitProcess(1)
         }
         val model = System.getenv("GEMINI_MODEL")?.takeIf { it.isNotBlank() }
             ?: "gemini-3.5-flash-lite"
         try {
             val client = GeminiClient(key, model)
-            if (args.first() == "--discover") {
+            if (args.first() == "--review") {
                 val root = java.nio.file.Path.of(args.getOrNull(1) ?: "samples")
-                Agent(FileTools(root), client::generateContent).discoverFiles()
+                Agent(FileTools(root), client::generateContent).reviewCode()
             } else {
                 println("[model request] Gemini model=$model; text-only connection check")
                 val answer = client.generateText(

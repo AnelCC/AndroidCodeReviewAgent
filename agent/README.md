@@ -10,7 +10,7 @@ Run commands from the repository root.
 
 An optional relative or absolute review folder can be passed with `--args="samples"`.
 
-## Gemini connection check (current learning path)
+## Gemini connection check
 
 Use an API key from a Google AI Studio project marked **Free tier**. Keep that
 project on the free tier; the client cannot determine your billing tier.
@@ -52,19 +52,44 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 export PATH="$JAVA_HOME/bin:$PATH"
 ```
 
-## First tool-calling milestone
+## Code review
+
+With GEMINI_API_KEY set in the current terminal, run:
 
 ```sh
-./gradlew :agent:run --args="--discover"
+./gradlew :agent:run --args="--review"
 ```
 
-Uses GEMINI_API_KEY and the same model as --gemini. The model can request
-list_files; Kotlin validates the request, runs the real file tool, and returns
-its JSON result. All model content parts are preserved between rounds, and
-function response IDs match request IDs when present. The model chooses whether
-to call the tool; the prompt asks it to list files. Logs show each exchange.
-The discovery prompt still asks only for paths. Both list_files and read_file are
-now exposed and executable: if the model requests read_file, numbered source
-contents are sent back. read_file requires exactly one nonblank string argument,
-path, and FileTools restricts access to the review folder.
-The loop stops after at most four model requests (no automatic retries).
+To choose another review folder:
+
+```sh
+./gradlew :agent:run --args="--review samples"
+```
+
+`--review` replaces the earlier `--discover` command. No flag still runs the
+local file-tool demonstration, and `--gemini` still runs the text connection check.
+
+Main calls `Agent.reviewCode()`. The prompt asks Gemini to discover Kotlin files
+with list_files and inspect them with read_file before reporting bugs. Each
+finding should contain a file path, line number, title, trigger, impact, and fix.
+The prompt asks for evidence from inspected source and an explicit statement of
+any failed reads or unreviewed files. These are model instructions, not a strict
+output schema or a guarantee of complete bug detection. The sample's intentional
+bug is not disclosed in the prompt.
+
+Kotlin validates tool arguments and executes the real file tools. read_file
+requires exactly one nonblank string argument, path. FileTools restricts reads
+to Kotlin files inside the configured review folder and returns numbered source.
+That source is sent to Google for review. Use the toy samples on the free tier.
+
+Logs show each model request, tool call, tool result, and model text. All model
+content parts are preserved between rounds, including thought signatures;
+function response IDs match request IDs when present. The model chooses tool
+calls; the prompt guides the sequence. The loop stops after at most four model
+requests, with no automatic retries or paid fallback.
+
+Run offline tests with:
+
+```sh
+./gradlew :agent:test
+```
