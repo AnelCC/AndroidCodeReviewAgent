@@ -20,7 +20,10 @@ class Agent(
                     put("text", """
                         Review the Kotlin source code in the configured review folder for bugs.
                         Use list_files to discover Kotlin files, then use read_file to inspect
-                        their contents before producing a review.
+                        every returned file before producing a review. Do not stop after the first file.
+                        Consider how the files interact: trace calls between them and check whether
+                        inputs, return values, and assumptions agree across callers and callees.
+                        Support any finding about interactions with code received from the relevant files.
 
                         For each finding, include:
                         - File path and line number from the numbered source returned by read_file.
