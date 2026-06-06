@@ -20,7 +20,7 @@ class GreetingActivity : Activity() {
             setOnClickListener {
                 val name = nameInput.text.toString()
                 val age = ageInput.text.toString().toInt()
-                greeting.text = "Hello, $name! Next year you will be ${age + 1}."
+                greeting.text = GreetingFormatter.format(name, age)
             }
         }
 
