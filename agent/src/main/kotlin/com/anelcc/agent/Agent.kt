@@ -6,7 +6,7 @@ import kotlinx.serialization.json.*
 class Agent(
     private val files: FileTools,
     private val request: (JsonArray, JsonArray) -> JsonObject,
-    private val maxRounds: Int = 4,
+    private val maxRounds: Int = DEFAULT_MAX_ROUNDS,
 ) {
     init {
         require(maxRounds > 0)
@@ -68,7 +68,7 @@ class Agent(
             }
         }
         repeat(maxRounds) { round ->
-            println("[model request] review round=${round + 1}")
+            println("[model request] review round=${round + 1}/$maxRounds")
             val content = request(JsonArray(history.toList()), tools)
             // Keep all model parts intact, including any thought signatures.
             history.add(content)

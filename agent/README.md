@@ -66,6 +66,20 @@ To choose another review folder:
 ./gradlew :agent:run --args="--review samples"
 ```
 
+To allow a different maximum number of model requests:
+
+```sh
+./gradlew :agent:run --args="--review samples --max-rounds 12"
+```
+
+The default is eight rounds (previously four). A round is one request to Gemini,
+not one file or one tool call. The final review also needs a round. Gemini can
+request several tools in one response. The agent stops early when it produces
+a final answer. Increasing the limit allows more requests and may consume more
+free-tier quota; it does not force the agent to use every round.
+`--max-rounds` must be a positive whole number; invalid values fail before any
+API request. Logs display the current round and maximum, such as `round=2/8`.
+
 `--review` replaces the earlier `--discover` command. No flag still runs the
 local file-tool demonstration, and `--gemini` still runs the text connection check.
 
@@ -85,7 +99,7 @@ That source is sent to Google for review. Use the toy samples on the free tier.
 Logs show each model request, tool call, tool result, and model text. All model
 content parts are preserved between rounds, including thought signatures;
 function response IDs match request IDs when present. The model chooses tool
-calls; the prompt guides the sequence. The loop stops after at most four model
+calls; the prompt guides the sequence. The loop stops at the configured maximum number of model
 requests, with no automatic retries or paid fallback.
 
 Run offline tests with:

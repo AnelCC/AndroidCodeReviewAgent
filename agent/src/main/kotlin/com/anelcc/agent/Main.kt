@@ -2,6 +2,15 @@ package com.anelcc.agent
 
 fun main(args: Array<String>) {
     if (args.firstOrNull() in setOf("--gemini", "--review")) {
+        val reviewOptions = if (args.first() == "--review") {
+            try {
+                parseReviewOptions(args.drop(1))
+            } catch (error: IllegalArgumentException) {
+                System.err.println(error.message)
+                System.err.println("Usage: --review [folder] [--max-rounds positive-integer]")
+                kotlin.system.exitProcess(1)
+            }
+        } else null
         val key = System.getenv("GEMINI_API_KEY")?.takeIf { it.isNotBlank() }
         if (key == null) {
             System.err.println("Set GEMINI_API_KEY before using --gemini or --review.")
@@ -12,8 +21,9 @@ fun main(args: Array<String>) {
         try {
             val client = GeminiClient(key, model)
             if (args.first() == "--review") {
-                val root = java.nio.file.Path.of(args.getOrNull(1) ?: "samples")
-                Agent(FileTools(root), client::generateContent).reviewCode()
+                val options = requireNotNull(reviewOptions)
+                val root = java.nio.file.Path.of(options.folder)
+                Agent(FileTools(root), client::generateContent, options.maxRounds).reviewCode()
             } else {
                 println("[model request] Gemini model=$model; text-only connection check")
                 val answer = client.generateText(
