@@ -107,3 +107,14 @@ Run offline tests with:
 ```sh
 ./gradlew :agent:test
 ```
+
+## File coverage
+
+After each review attempt, Kotlin prints a `[coverage]` summary, even if the
+request fails or the round limit is reached. It records paths from successful
+list_files calls and files successfully read by read_file. Repeated reads count
+once. Skipped files are discovered paths minus successfully read paths; failed
+reads remain skipped. A final model answer does not imply that no files were
+skipped. Without a successful listing, total coverage is reported as unknown.
+These records describe tool execution, not proof that Gemini analyzed every
+line or found every bug. They do not add API calls or force additional reads.

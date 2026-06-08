@@ -12,7 +12,16 @@ class Agent(
         require(maxRounds > 0)
     }
 
+    var lastCoverage: ReviewCoverage? = null
+        private set
+
     fun reviewCode(): String {
+        // Sets avoid counting repeated reads or listings more than once.
+        val discoveredFiles = linkedSetOf<String>()
+        val readFiles = linkedSetOf<String>()
+        var discoveryCompleted = false
+        var finalAnswerReceived = false
+        lastCoverage = null
         val history = mutableListOf<JsonElement>(buildJsonObject {
             put("role", "user")
             putJsonArray("parts") {
@@ -67,74 +76,92 @@ class Agent(
                 }
             }
         }
-        repeat(maxRounds) { round ->
-            println("[model request] review round=${round + 1}/$maxRounds")
-            val content = request(JsonArray(history.toList()), tools)
-            // Keep all model parts intact, including any thought signatures.
-            history.add(content)
-            val text = geminiText(content)
-            if (text.isNotBlank()) println("[model response] $text")
-            val calls = content["parts"]?.jsonArray.orEmpty()
-                .mapNotNull { it.jsonObject["functionCall"]?.jsonObject }
-            if (calls.isEmpty()) {
-                if (text.isBlank()) throw GeminiRequestException("Gemini returned neither text nor tool calls.")
-                return text
-            }
-            if (round == maxRounds - 1) {
-                throw GeminiRequestException("Stopped after $maxRounds model rounds without a final answer.")
-            }
-            if (calls.size > 8) throw GeminiRequestException("Too many tool calls in one response.")
-            val results = calls.map { call ->
-                val name = call.getValue("name").jsonPrimitive.content
-                val args = call["args"] ?: buildJsonObject {}
-                println("[tool call] $name args=$args")
-                val result = try {
-                    when (name) {
-                        "list_files" -> {
-                            require(args is JsonObject && args.isEmpty()) {
-                                "list_files takes no arguments"
-                            }
-                            buildJsonObject {
-                                putJsonArray("files") { files.listFiles().forEach { add(it) } }
-                            }
-                        }
-                        "read_file" -> {
-                            require(args is JsonObject && args.keys == setOf("path")) {
-                                "read_file requires only a path argument"
-                            }
-                            val path = args["path"] as? JsonPrimitive
-                            require(path != null && path.isString && path.content.isNotBlank()) {
-                                "path must be a nonblank string"
-                            }
-                            val contents = files.readFile(path.content)
-                            buildJsonObject {
-                                put("path", path.content)
-                                put("contents", contents)
-                            }
-                        }
-                        else -> buildJsonObject { put("error", "Unknown tool. Use list_files or read_file.") }
-                    }
-                } catch (error: IllegalArgumentException) {
-                    buildJsonObject { put("error", "Invalid tool arguments or disallowed file path.") }
-                } catch (error: java.io.IOException) {
-                    buildJsonObject { put("error", "Could not access the requested file or review folder.") }
-                } catch (error: SecurityException) {
-                    buildJsonObject { put("error", "Access to the requested file was denied.") }
+        try {
+            repeat(maxRounds) { round ->
+                println("[model request] review round=${round + 1}/$maxRounds")
+                val content = request(JsonArray(history.toList()), tools)
+                // Keep all model parts intact, including any thought signatures.
+                history.add(content)
+                val text = geminiText(content)
+                if (text.isNotBlank()) println("[model response] $text")
+                val calls = content["parts"]?.jsonArray.orEmpty()
+                    .mapNotNull { it.jsonObject["functionCall"]?.jsonObject }
+                if (calls.isEmpty()) {
+                    if (text.isBlank()) throw GeminiRequestException("Gemini returned neither text nor tool calls.")
+                    finalAnswerReceived = true
+                    return text
                 }
-                println("[tool result] $result")
-                buildJsonObject {
-                    putJsonObject("functionResponse") {
-                        put("name", name)
-                        call["id"]?.let { put("id", it) }
-                        put("response", result)
+                if (round == maxRounds - 1) {
+                    throw GeminiRequestException("Stopped after $maxRounds model rounds without a final answer.")
+                }
+                if (calls.size > 8) throw GeminiRequestException("Too many tool calls in one response.")
+                val results = calls.map { call ->
+                    val name = call.getValue("name").jsonPrimitive.content
+                    val args = call["args"] ?: buildJsonObject {}
+                    println("[tool call] $name args=$args")
+                    val result = try {
+                        when (name) {
+                            "list_files" -> {
+                                require(args is JsonObject && args.isEmpty()) {
+                                    "list_files takes no arguments"
+                                }
+                                val paths = files.listFiles()
+                                discoveredFiles.addAll(paths)
+                                discoveryCompleted = true
+                                buildJsonObject {
+                                    putJsonArray("files") { paths.forEach { add(it) } }
+                                }
+                            }
+                            "read_file" -> {
+                                require(args is JsonObject && args.keys == setOf("path")) {
+                                    "read_file requires only a path argument"
+                                }
+                                val path = args["path"] as? JsonPrimitive
+                                require(path != null && path.isString && path.content.isNotBlank()) {
+                                    "path must be a nonblank string"
+                                }
+                                val contents = files.readFile(path.content)
+                                // Mark a read only after FileTools succeeds. Normalize ./ and .. aliases.
+                                readFiles.add(java.nio.file.Path.of(path.content).normalize().toString().replace('\\', '/'))
+                                buildJsonObject {
+                                    put("path", path.content)
+                                    put("contents", contents)
+                                }
+                            }
+                            else -> buildJsonObject { put("error", "Unknown tool. Use list_files or read_file.") }
+                        }
+                    } catch (error: IllegalArgumentException) {
+                        buildJsonObject { put("error", "Invalid tool arguments or disallowed file path.") }
+                    } catch (error: java.io.IOException) {
+                        buildJsonObject { put("error", "Could not access the requested file or review folder.") }
+                    } catch (error: SecurityException) {
+                        buildJsonObject { put("error", "Access to the requested file was denied.") }
+                    }
+                    println("[tool result] $result")
+                    buildJsonObject {
+                        putJsonObject("functionResponse") {
+                            put("name", name)
+                            call["id"]?.let { put("id", it) }
+                            put("response", result)
+                        }
                     }
                 }
+                history.add(buildJsonObject {
+                    put("role", "user")
+                    put("parts", JsonArray(results))
+                })
             }
-            history.add(buildJsonObject {
-                put("role", "user")
-                put("parts", JsonArray(results))
-            })
+            error("Unreachable")
+        } finally {
+            // finally runs on a normal return, a round-limit stop, and API failures.
+            val coverage = ReviewCoverage(
+                discoveryCompleted,
+                finalAnswerReceived,
+                discoveredFiles.toSet(),
+                readFiles.toSet(),
+            )
+            lastCoverage = coverage
+            coverage.printSummary()
         }
-        error("Unreachable")
     }
 }

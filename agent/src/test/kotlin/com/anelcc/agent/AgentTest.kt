@@ -14,6 +14,7 @@ class AgentTest {
         val root = Files.createTempDirectory(parent, "agent-")
         try {
             Files.writeString(root.resolve("GreetingActivity.kt"), "class GreetingActivity")
+            Files.writeString(root.resolve("GreetingFormatter.kt"), "object GreetingFormatter")
             test(FileTools(root))
         } finally {
             root.toFile().deleteRecursively()
@@ -43,7 +44,7 @@ class AgentTest {
                     .jsonObject.getValue("functionResponse").jsonObject
                 assertEquals("call-1", result.getValue("id").jsonPrimitive.content)
                 val paths = result.getValue("response").jsonObject.getValue("files").jsonArray
-                assertEquals(listOf("GreetingActivity.kt"), paths.map { it.jsonPrimitive.content })
+                assertEquals(listOf("GreetingActivity.kt", "GreetingFormatter.kt"), paths.map { it.jsonPrimitive.content })
                 finalContent
             }
         })
@@ -127,6 +128,74 @@ class AgentTest {
         listOf("../outside.kt", "/outside.kt", "missing.kt").forEach { path ->
             assertTrue("error" in readResult(files, buildJsonObject { put("path", path) }))
         }
+    }
+
+    private fun readCall(path: String): JsonObject = buildJsonObject {
+        put("role", "model")
+        putJsonArray("parts") {
+            addJsonObject {
+                putJsonObject("functionCall") {
+                    put("name", "read_file")
+                    putJsonObject("args") { put("path", path) }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `coverage reports both files read and deduplicates equivalent paths`() = withFiles { files ->
+        val responses = listOf(callContent, readCall("./GreetingActivity.kt"),
+            readCall("GreetingActivity.kt"), readCall("GreetingFormatter.kt"), finalContent).iterator()
+        val agent = Agent(files, { _, _ -> responses.next() })
+        agent.reviewCode()
+        val coverage = requireNotNull(agent.lastCoverage)
+        assertTrue(coverage.discoveryCompleted)
+        assertTrue(coverage.finalAnswerReceived)
+        assertEquals(setOf("GreetingActivity.kt", "GreetingFormatter.kt"), coverage.readFiles)
+        assertTrue(coverage.skippedFiles.isEmpty())
+    }
+
+    @Test
+    fun `a final answer does not hide skipped files`() = withFiles { files ->
+        val responses = listOf(callContent, readCall("GreetingActivity.kt"), finalContent).iterator()
+        val agent = Agent(files, { _, _ -> responses.next() })
+        agent.reviewCode()
+        val coverage = requireNotNull(agent.lastCoverage)
+        assertTrue(coverage.finalAnswerReceived)
+        assertEquals(setOf("GreetingFormatter.kt"), coverage.skippedFiles)
+    }
+
+    @Test
+    fun `failed reads remain skipped and coverage survives an API failure`() = withFiles { files ->
+        var calls = 0
+        val agent = Agent(files, { history, _ ->
+            calls++
+            if (calls == 2) {
+                // A rejected read must not mark any discovered file as read.
+                readCall("../GreetingFormatter.kt")
+            } else if (calls == 3) {
+                assertTrue(history.last().toString().contains("error"))
+                throw GeminiRequestException("Simulated API outage")
+            } else callContent
+        })
+        assertFailsWith<GeminiRequestException> { agent.reviewCode() }
+        val coverage = requireNotNull(agent.lastCoverage)
+        assertTrue(!coverage.finalAnswerReceived)
+        assertTrue(coverage.readFiles.isEmpty())
+        assertEquals(coverage.discoveredFiles, coverage.skippedFiles)
+    }
+
+    @Test
+    fun `round limit keeps coverage and missing listing stays unknown`() = withFiles { files ->
+        val agent = Agent(files, { _, _ -> callContent }, maxRounds = 2)
+        assertFailsWith<GeminiRequestException> { agent.reviewCode() }
+        assertEquals(setOf("GreetingActivity.kt", "GreetingFormatter.kt"),
+            requireNotNull(agent.lastCoverage).skippedFiles)
+        assertTrue(!requireNotNull(agent.lastCoverage).finalAnswerReceived)
+
+        val noListing = Agent(files, { _, _ -> finalContent })
+        noListing.reviewCode()
+        assertTrue(!requireNotNull(noListing.lastCoverage).discoveryCompleted)
     }
 
 }
