@@ -1,5 +1,8 @@
 # Kotlin agent
 
+For the project overview, architecture, and secure setup guide, see the
+[root README](../README.md).
+
 Run commands from the repository root.
 
 ## Local file tools (no API call)
@@ -33,8 +36,11 @@ or execute model-requested tools yet. The key is sent in a header, never a URL.
 No automatic retries or paid fallback are configured.
 
 Model: https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite
+
 Pricing: https://ai.google.dev/gemini-api/docs/pricing
+
 REST: https://ai.google.dev/api/generate-content
+
 
 ## Implementation
 
